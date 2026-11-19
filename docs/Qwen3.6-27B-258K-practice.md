@@ -13,7 +13,16 @@
 
 ## 环境依赖
 
-硬件：每机 8 × Ascend 950DT，HBM 96 GiB/卡，卡间 UB 全互联；双机 HCCL 走 `enp39s0f3`（节点 192.168.3.82 / .87），NIC0 → NPU0-3，NIC1 → NPU4-7。驱动 25.1.rc2，宿主 Huawei Cloud EulerOS 3.0 aarch64，共享存储 SFS Turbo 挂 `/mnt/sfs_turbo`。
+硬件：每机 8 × Ascend 950DT，HBM 96 GiB/卡，卡间 UB 全互联；双机 HCCL 走 `$NIC`（节点 `$NODE0` / `$NODE1`），NIC0 → NPU0-3，NIC1 → NPU4-7。驱动 25.1.rc2，宿主 Huawei Cloud EulerOS 3.0 aarch64，共享存储 SFS Turbo 挂在 `$SFS`。
+
+下文只用下表的变量，换环境只改这张表。
+
+| 变量 | 含义 | 本场景取值 |
+| --- | --- | --- |
+| `$SFS` | 共享存储挂载点，两机同路径 | `/mnt/sfs_turbo`（SFS Turbo） |
+| `$SRC` | 框架源码目录（editable 安装） | `/home/ma-user/mm-turbo/` |
+| `$NIC` | HCCL / Gloo / TP 用的网卡名 | `enp39s0f3` |
+| `$NODE0` / `$NODE1` | 两个节点 | `192.168.3.82` / `192.168.3.87` |
 
 | 项 | 版本 |
 | --- | --- |
@@ -23,7 +32,7 @@
 | torch / torch_npu | 2.10.0 / 2.10.0.post4 |
 | transformers | 5.2.0 |
 | triton | 3.5.0 |
-| 训练框架 | mindspeed-mm 0.1 + mindspeed 0.12.1（editable，`/home/ma-user/mm-turbo/`） |
+| 训练框架 | mindspeed-mm 0.1 + mindspeed 0.12.1（editable，装在 `$SRC`） |
 | GDN 算子 | CANN 自带 `opp/vendors/fla_npu_transformer` |
 | 代码版本 | git `669ae6d7`（2026-09-08） |
 | 权重 | 52 GB / 15 分片 |
@@ -64,9 +73,9 @@ export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 export HCCL_CONNECT_TIMEOUT=7200
 export HCCL_EXEC_TIMEOUT=7200
 export ASCEND_CUSTOM_OPP_PATH="${ASCEND_HOME_PATH}/opp/vendors/fla_npu_transformer:${ASCEND_HOME_PATH}/opp/vendors/fla_npu_transformer/op_api/lib"
-export GLOO_SOCKET_IFNAME=enp39s0f3
-export TP_SOCKET_IFNAME=enp39s0f3
-export HCCL_SOCKET_IFNAME=enp39s0f3
+export GLOO_SOCKET_IFNAME=$NIC
+export TP_SOCKET_IFNAME=$NIC
+export HCCL_SOCKET_IFNAME=$NIC
 ```
 
 ### 适配问题记录

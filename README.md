@@ -1,6 +1,6 @@
 # ascend-practice
 
-昇腾训练实践文档与配套 SKILL。每个场景（模型 + 序列长度 + 卡数）一篇文档。
+昇腾训练实践文档与配套 SKILL。每个场景（模型 + 序列长度 + 卡数 + 框架）一篇文档。
 
 ## 目录
 
@@ -11,11 +11,12 @@ docs/                                 各场景实践文档
 
 ## 实践文档
 
-| 模型 | 序列长度 | 卡数 | 有效 TPS/卡（开箱 → 最终） | 文档 |
-| --- | --- | --- | --- | --- |
-| Qwen3.6-27B | 258K | 16（2 机） | 54.7 → 956.4（×17.5） | [Qwen3.6-27B-258K-practice.md](docs/Qwen3.6-27B-258K-practice.md) |
-| Qwen3.6-27B | 4096 | 8 | 741.3 → 1333.7（×1.80） | [Qwen3.6-27B-4096-practice.md](docs/Qwen3.6-27B-4096-practice.md) |
-| Qwen3.6-35B-A3B | 4096 | 8 | 188.6 → 2081.9（×11.0） | [Qwen3.6-35B-A3B-4096-practice.md](docs/Qwen3.6-35B-A3B-4096-practice.md) |
+| 模型 | 序列长度 | 卡型 | 卡数 | 框架 | 有效 TPS/卡（开箱 → 最终） | 文档 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Qwen3.6-27B | 258K | A5 | 16（2 机） | MindSpeed-MM（FSDP2 + Ulysses） | 54.7 → 956.4（×17.5） | [Qwen3.6-27B-258K-practice.md](docs/Qwen3.6-27B-258K-practice.md) |
+| Qwen3.6-27B | 4096 | A5 | 8 | MindSpeed-MM（FSDP2） | 741.3 → 1333.7（×1.80） | [Qwen3.6-27B-4096-practice.md](docs/Qwen3.6-27B-4096-practice.md) |
+| Qwen3.6-35B-A3B | 4096 | A5 | 8 | ms-swift（Megatron） | 188.6 → 2081.9（×11.0） | [Qwen3.6-35B-A3B-4096-practice.md](docs/Qwen3.6-35B-A3B-4096-practice.md) |
+| Qwen3.6-35B-A3B | 4096 | A3 | 16 die（1 机 8 芯片） | ms-swift（Megatron） | 510 → 1689（×3.31） | [Qwen3.6-35B-A3B-4096-A3-practice.md](docs/Qwen3.6-35B-A3B-4096-A3-practice.md) |
 
 ## SKILL 安装
 

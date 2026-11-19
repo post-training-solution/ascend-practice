@@ -12,7 +12,15 @@
 
 ## 环境依赖
 
-硬件：单机 8 × Ascend 950DT_9582，HBM 98304 MB/卡，卡间 UB 全互联（`npu-smi info -t topo` 两两直连，无 PCIe 旁路）。驱动 25.1.rc2 / 固件 7.0.9.100.203，宿主 Huawei Cloud EulerOS 3.0 aarch64，共享存储 SFS Turbo（2.4 TB NFS）挂 `/mnt/sfs_turbo`。已验证节点 192.168.3.82 / .87 / 1.166，硬件规格一致、共用同一个 SFS Turbo；下文数字均在 82 上采集。
+硬件：单机 8 × Ascend 950DT_9582，HBM 98304 MB/卡，卡间 UB 全互联（`npu-smi info -t topo` 两两直连，无 PCIe 旁路）。驱动 25.1.rc2 / 固件 7.0.9.100.203，宿主 Huawei Cloud EulerOS 3.0 aarch64，共享存储 SFS Turbo（2.4 TB NFS）挂在 `$SFS`。已验证三个节点 `$NODE0` / `$NODE1` / `$NODE2`，硬件规格一致、共用同一个 SFS Turbo；下文数字均在 `$NODE0` 上采集。
+
+下文只用下表的变量，换环境只改这张表。
+
+| 变量 | 含义 | 本场景取值 |
+| --- | --- | --- |
+| `$SFS` | 共享存储挂载点，三个节点同路径 | `/mnt/sfs_turbo`（SFS Turbo，2.4 TB NFS） |
+| `$MODEL` | 权重目录 | `$SFS/models/Qwen3.6-35B-A3B` |
+| `$NODE0` / `$NODE1` / `$NODE2` | 三个同规格节点，`$NODE0` 为基准 | `192.168.3.82` / `192.168.3.87` / `192.168.1.166` |
 
 | 项 | 版本 |
 | --- | --- |
@@ -26,9 +34,9 @@
 | Megatron | 0.16.0（`/Megatron-LM`） |
 | GDN 算子 | fla 0.6.0（`/flash-linear-attention`）；优化后走 FLA 原生变长 |
 | 其他 | accelerate 1.15.0、modelscope 1.40.1、vllm-ascend 0.23.0 |
-| 权重 | `/mnt/sfs_turbo/models/Qwen3.6-35B-A3B`，26 分片 |
+| 权重 | `$MODEL`，26 分片 |
 
-镜像落地：新节点往往拉不到外网，走共享盘传——源节点 `docker save` 到 `/mnt/sfs_turbo`（4m32s，产物 23.6 GB），目标节点先比 md5 再 `docker load`（166 上加载 + 起容器 + 自检共 1m40s）。不要在正在测性能的节点上 `docker save`：35B 训练是下发受限的，持续写 20+ GB 会污染被测的量。
+镜像落地：新节点往往拉不到外网，走共享盘传——源节点 `docker save` 到 `$SFS`（4m32s，产物 23.6 GB），目标节点先比 md5 再 `docker load`（`$NODE2` 上加载 + 起容器 + 自检共 1m40s）。不要在正在测性能的节点上 `docker save`：35B 训练是下发受限的，持续写 20+ GB 会污染被测的量。
 
 数据集：`AI-ModelScope/alpaca-gpt4-data-zh#20000`，binpack 打成 711 个 pack，均长 4063.45 ± 262.65（min 418 / max 4096），填充率 99.21%，8 进程打包耗时 14 s。alpaca 单样本远短于 4096，必须开 `--packing true`，否则测到的是 padding 的吞吐。
 
@@ -45,7 +53,7 @@ export MEGATRON_LM_PATH=/Megatron-LM USE_MCORE_GDN=1
 export TASK_QUEUE_ENABLE=2 CPU_AFFINITY_CONF=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 export HCCL_CONNECT_TIMEOUT=1800 COMBINED_ENABLE=1
-export MODELSCOPE_CACHE=/mnt/sfs_turbo/ms_cache
+export MODELSCOPE_CACHE=$SFS/ms_cache
 
 # 两处代码改动的开关，补丁默认全关，不设即逐字回退上游实现
 export MS_SEQ_ALIGN=64            # 优化点 5：序列补齐到 64 整数倍
@@ -55,7 +63,7 @@ export MS_FOREACH_CLIP=1          # 优化点 6：foreach 梯度范数
 
 NPROC_PER_NODE=8 ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 megatron sft \
-  --model /mnt/sfs_turbo/models/Qwen3.6-35B-A3B \
+  --model $MODEL \
   --dataset 'AI-ModelScope/alpaca-gpt4-data-zh#20000' \
   --tensor_model_parallel_size 4 --pipeline_model_parallel_size 1 \
   --expert_model_parallel_size 8 --expert_tensor_parallel_size 1 \
@@ -106,7 +114,7 @@ megatron sft \
 | 8 | 容器被 SIGKILL，`ExitCode 137` | 集群级行为：两台机器的容器在同一秒被杀，宿主未重启 | 日志和产物实时落共享盘；`docker restart` 能拉回来，DNS 要重做 |
 | 9 | `ExchangeDevice … error code is 507033`、`TsdOpen failed` | 容器缺 `--privileged`，或 driver 挂成 `:ro`，或挂载不全 | 从已跑通容器全量复制 binds + devices |
 | 10 | `--save_strategy: invalid choice: 'no'` | 只接受 `steps` / `epoch` | `steps` + 大 `save_steps` |
-| 11 | `tensor_model_parallel_size 1` 失败，同样是 `aclrtCreateStreamWithConfig error` | 未定位，82 / 166 各 2 次复现；它本质上不是单变量（TP 4→1 连带改 DP、`sequence_parallel`、每 rank microbatch 数） | 避开；要测 TP 影响需在 16 卡上固定 DP 做 TP=4 vs TP=2 |
+| 11 | `tensor_model_parallel_size 1` 失败，同样是 `aclrtCreateStreamWithConfig error` | 未定位，`$NODE0` / `$NODE2` 各 2 次复现；它本质上不是单变量（TP 4→1 连带改 DP、`sequence_parallel`、每 rank microbatch 数） | 避开；要测 TP 影响需在 16 卡上固定 DP 做 TP=4 vs TP=2 |
 | 12 | 旧文档要求卸载 mindspeed、删除 fla | ms-swift 4.5.3 依赖 `mindspeed.megatron_adaptor`，并自行把 fla 的 GDN 换成 NPU 算子 | 两者都保留；只有 `mindspeed_mm` 不能存在 |
 | 13 | pip 显示 megatron-core 0.19.2，`__version__` 是 0.16.0 | `PYTHONPATH` 把 `/Megatron-LM` 排在 site-packages 前 | 正常，0.16 与 MindSpeed 0.16.0 配套 |
 | 14 | `megatron sft --help` 查不到 ms-swift 参数 | help 只列 MindSpeed 追加的约 138 个参数 | 用下方脚本列出 409 个 dataclass 字段 |
@@ -137,7 +145,7 @@ PY
 
 单步要自己算：`train_speed(s/it)` 是含首步的累计均值，用 `elapsed_time` 的累计值算 （T_N − T_1）/ (N − 1)。有效 TPS/卡 = GBS × pack 均长 ÷ 稳定单步 ÷ 卡数。
 
-两个读数字时要注意的点。一是跳节点不可比：同配置、同镜像 ID 下 192.168.3.82 是 62.7 s / 259.2 有效 TPS/卡，192.168.1.166 是 68.7 s / 236.6，166 慢 9.6%，成因未定位。二是倍数的口径：实验记录里的 13.5× 是 2544.2（总）÷ 188.6（有效），同口径下应为 ×13.4（总）或 ×11.0（有效）。
+两个读数字时要注意的点。一是跳节点不可比：同配置、同镜像 ID 下 `$NODE0` 是 62.7 s / 259.2 有效 TPS/卡，`$NODE2` 是 68.7 s / 236.6，`$NODE2` 慢 9.6%，成因未定位。二是倍数的口径：实验记录里的 13.5× 是 2544.2（总）÷ 188.6（有效），同口径下应为 ×13.4（总）或 ×11.0（有效）。
 
 ## 优化特性以及效果
 
