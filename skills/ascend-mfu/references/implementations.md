@@ -4,7 +4,6 @@
 
 - verl `verl/utils/flops_counter.py`
 - `calc_model_flops.py`（通用 FLOPs 计算脚本）
-- awesome-ascend-skills 中的 `training-mfu-calculator`
 
 ## 交叉核对（同一 config、同一长度，用 verl 原函数计算）
 
@@ -54,15 +53,5 @@
 | moe_layer_freq | 支持 | 支持 |
 
 值得借鉴的设计：逐层累加并输出 breakdown，按 `thinker_config` 归一化 Omni 模型，支持 MLA，`--all` 批量扫描目录。
-
-## training-mfu-calculator
-
-| 项 | 该 skill | 本口径 |
-| --- | --- | --- |
-| 注意力 | `4·S²·n·d` 前向，不减半 | 减半 |
-| MoE | 所有层都当 MoE，没有 router 和共享专家 | 逐层判定，含 router 和共享专家 |
-| packing / 变长 | 不支持 | Σsᵢ² |
-| 峰值 | 默认 910B2 = 353，表内 FP16 值与 verl 的 354 不一致 | 必须显式给出 |
-| 文档自洽 | 示例报告“52.31% → 良好 (50-60%)”与评估表“≥40% 优秀”矛盾 | — |
 
 值得借鉴的设计：“信息来源”一节逐项写明 config.json 字段和启动脚本参数怎么对应计算参数，以及怎么从日志里提取 step_time。本 skill 的“输入从哪里来”一节沿用了这个思路。

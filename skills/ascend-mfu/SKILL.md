@@ -100,12 +100,4 @@ breakdown: <各组件占比>
 - MFU 高于 70% 或低于 5% 时，先查输入：卡数和峰值的单位是否一致、tokens 是否含 pad、日志里的时间是不是单步时间。
 - 和框架打印的值对不上时，先看 `references/implementations.md` 里列出的差异，再怀疑输入。
 
-## 与其他实现的差异（摘要）
-
-| 实现 | 与本口径的差异 | 影响 |
-| --- | --- | --- |
-| verl `flops_counter.py` | 把 embedding 计为 6·V·h；滑窗没有减半；ViT merger 多算 4 倍；GDN 系数用 15（本口径为 18） | 稠密 7B 高 6%，A3B MoE 高 16%；gemma3 低约 1% |
-| `calc_model_flops.py` | 只算前向（推理口径）；注意力不减半；GDN 核心按 key_dim×value_dim 多算 n_k 倍；缺门控 q_proj | 不能直接用于训练 MFU |
-| training-mfu-calculator | 注意力不减半；没有 router 和共享专家；所有层都当 MoE；峰值表互相矛盾 | 长序列下偏高 |
-
 明细和交叉核对结果见 `references/implementations.md`。
